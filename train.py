@@ -4,24 +4,40 @@ from PIL import Image
 import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
-from utils import STASDataset
+from utils import STASDataset, FocalLoss, iou_score, dice_score, log, fix_randomseed
 from torch.utils.data import DataLoader, Subset
 from torchsummary import summary
-from mean_iou_evaluate import mean_iou_score, read_masks
 from model import UNet
+import wandb
 
 def train():
-    os.mkdir('./models', exist_ok=True)
+    wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="STAS_Segmentation", 
+        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+        name=f"U-Net-224-CE", 
+        # Track hyperparameters and run metadata
+        config={
+        "learning_rate": 3e-4,
+        "architecture": "UNET",
+        "dataset": "Tbrain-2022-STAS-Segmentation",
+        "epochs": 50,
+        })
+    SIZE = 224
+    SEED = 8863
+    fix_randomseed(SEED)
+    os.makedirs('./models', exist_ok=True)
     img_root = 'Train_Images/'
     json_root = 'Train_Annotations/'
-    model_path = 'models/UNET_crop448.ckpt'
+    model_path = f'models/UNET_crop{SIZE}.ckpt'
     name_dir = os.listdir('Train_Annotations')
     names = [name[:-5] for name in name_dir]
 
     train_idx = [idx for idx in range(len(names)) if idx % 10 != 0]
     valid_idx = [idx for idx in range(len(names)) if idx % 10 == 0]
 
-    all_dataset = STASDataset(json_root, img_root, names)
+    all_dataset = STASDataset(json_root, img_root, names, SIZE)
     train_set = Subset(all_dataset, train_idx)
     valid_set = Subset(all_dataset, valid_idx)
 
@@ -40,12 +56,10 @@ def train():
     decay = 5e-4
     accum_iter = 32
     early_stop = 50
-    best_miou = 0.0
+    best_dice = 0.0
 
-    weight = [0.5, 2.5]
-    class_weights = torch.FloatTensor(weight).to(device)
-    # criterion = nn.CrossEntropyLoss(weight=class_weights)
     criterion = nn.CrossEntropyLoss()
+    # criterion = FocalLoss(gamma=2, alpha=0.3)
     optimizer = torch.optim.AdamW(model.parameters(),lr=lr,weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=300)
 
@@ -53,7 +67,7 @@ def train():
     for epoch in range(EPOCHS):
         model.train()
         train_loss = []
-        train_miou = 0
+        train_iou = 0
         optimizer.zero_grad()
         preds = []
         masks = []
@@ -84,15 +98,16 @@ def train():
         # print(preds.shape)
         # print(masks.shape)
         train_loss = sum(train_loss) / len(train_loss)
-        train_miou = mean_iou_score(preds, masks)
+        train_iou = iou_score(preds, masks)
+        train_dice = dice_score(preds, masks)
 
         # Print the information.
-        print(f"[ Train | {epoch + 1:03d}/{EPOCHS:03d} ] Loss = {train_loss:.5f}, MIOU = {train_miou:.4f}")
+        print(f"[ Train | {epoch + 1:03d}/{EPOCHS:03d} ] Loss = {train_loss:.5f}, IOU = {train_iou:.4f}, DICE = {train_dice:.4f}")
 
         # ---------- Validation ----------
         
         valid_loss = []
-        valid_miou = 0
+        valid_iou = 0
         valid_preds = []
         valid_masks = []
         # Iterate the validation set by batches.
@@ -117,15 +132,18 @@ def train():
         # print(valid_preds.shape)
         # print(valid_masks.shape)
         valid_loss = sum(valid_loss) / len(valid_loss)
-        valid_miou = mean_iou_score(valid_preds, valid_masks)
+        valid_iou = iou_score(valid_preds, valid_masks)
+        valid_dice = dice_score(valid_preds, valid_masks)
 
         # Print the information.
-        print(f"[ Valid | {epoch + 1:03d}/{EPOCHS:03d} ] Loss = {valid_loss:.5f}, MIOU = {valid_miou:.4f}")
+        print(f"[ Valid | {epoch + 1:03d}/{EPOCHS:03d} ] Loss = {valid_loss:.5f}, IOU = {valid_iou:.4f}, DICE = {valid_dice:.4f}")
+        log(train_iou, train_loss, train_dice, valid_iou, valid_loss, valid_dice, epoch + 1)
+        
         # Save Best Model
-        if valid_miou > best_miou:
+        if valid_dice > best_dice:
             torch.save(model.state_dict(),model_path)
-            print(f'Save Model With MIOU: {valid_miou:.4f}')
-            best_miou = valid_miou
+            print(f'Save Model With DICE: {valid_dice:.4f}')
+            best_dice = valid_dice
             stop_count = 0
         else:
             stop_count += 1
@@ -136,3 +154,4 @@ def train():
 
 if __name__=='__main__':
     train()
+    wandb.finish()
