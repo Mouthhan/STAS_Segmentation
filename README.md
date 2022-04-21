@@ -25,5 +25,5 @@ https://tbrain.trendmicro.com.tw/Competitions/Details/22
 - [ ] 加入 DICE Loss 進行調和
 
 ## DONE
-1. FocalLoss 有顯著提升
+1. FocalLoss 影響不大
 2. 已可於 valid 中計算 IOU & DICE (但由於有 random crop，還需完成完整的 evaluate.py)
