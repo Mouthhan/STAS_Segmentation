@@ -23,6 +23,7 @@ https://tbrain.trendmicro.com.tw/Competitions/Details/22
 - [x] 將 Evaluation Method 從 IOU 改為 DICE (符合競賽規則)
 - [ ] 新增 evaluate.py 完整評分 valid set (all set 中 % 10 == 0) 
 - [ ] 加入 DICE Loss 進行調和
+- [ ] 於 Valid 之中挑選部分 Visualize
 
 ## DONE
 1. FocalLoss 影響不大
