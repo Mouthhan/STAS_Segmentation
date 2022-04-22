@@ -4,19 +4,19 @@ from PIL import Image
 import torch
 import torch.nn as nn
 from tqdm.auto import tqdm
-from utils import STASDataset, FocalLoss, iou_score, dice_score, log, fix_randomseed
+from utils import STASDataset, FocalLoss, DiceLoss, iou_score, dice_score, log, fix_randomseed, label2masks
 from torch.utils.data import DataLoader, Subset
 from torchsummary import summary
 from model import UNet
 import wandb
 
-def train():
+def train(size, loss_type):
     wandb.login()
     wandb.init(
         # Set the project where this run will be logged
         project="STAS_Segmentation", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"U-Net-224-CE", 
+        name=f"U-Net-{size}-{loss_type}+Dice", 
         # Track hyperparameters and run metadata
         config={
         "learning_rate": 3e-4,
@@ -24,13 +24,13 @@ def train():
         "dataset": "Tbrain-2022-STAS-Segmentation",
         "epochs": 50,
         })
-    SIZE = 224
+    SIZE = size
     SEED = 8863
     fix_randomseed(SEED)
     os.makedirs('./models', exist_ok=True)
     img_root = 'Train_Images/'
     json_root = 'Train_Annotations/'
-    model_path = f'models/UNET_crop{SIZE}.ckpt'
+    model_path = f'models/UNET_crop{SIZE}_{loss_type}+Dice.ckpt'
     name_dir = os.listdir('Train_Annotations')
     names = [name[:-5] for name in name_dir]
 
@@ -43,7 +43,7 @@ def train():
 
     BATCH_SIZE = 2
     train_loader = DataLoader(train_set, batch_size = BATCH_SIZE, shuffle=True)
-    valid_loader = DataLoader(valid_set, batch_size = BATCH_SIZE)
+    valid_loader = DataLoader(valid_set, batch_size = 1)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = UNet(3, 2).to(device)
@@ -58,12 +58,15 @@ def train():
     early_stop = 50
     best_dice = 0.0
 
-    criterion = nn.CrossEntropyLoss()
-    # criterion = FocalLoss(gamma=2, alpha=0.3)
+    if loss_type == 'CE':
+        criterion = nn.CrossEntropyLoss()
+    elif loss_type == 'Focal':
+        criterion = FocalLoss(gamma=2, alpha=0.3)
+    creterion_dice = DiceLoss()
     optimizer = torch.optim.AdamW(model.parameters(),lr=lr,weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=300)
 
-    print('Start Training')
+    print(f'Start Training with size: {SIZE}, Loss: {loss_type}')
     for epoch in range(EPOCHS):
         model.train()
         train_loss = []
@@ -79,6 +82,9 @@ def train():
                 logits = model(imgs)
                 
                 loss = criterion(logits,labels)
+                loss_dice = creterion_dice(logits.argmax(dim=1), labels)
+
+                loss = loss + loss_dice
                 train_loss.append(loss.detach().item())
                 loss = loss / accum_iter
                 loss.backward()
@@ -120,11 +126,15 @@ def train():
                 logits = model(imgs)
 
                 loss = criterion(logits, labels)
+                loss_dice = creterion_dice(logits.argmax(dim=1), labels)
+
+                loss = loss + loss_dice
                 pred = logits.cpu().argmax(dim=1).numpy()
                 valid_preds += list(pred)
                 valid_masks += list(labels.cpu().numpy())
-
                 valid_loss.append(loss.item())
+                if idx % 10 == 0 and (epoch) % 5 == 0:
+                    result = label2masks(pred[0], labels.cpu()[0].numpy(), imgs.cpu()[0].numpy(),idx, epoch, SIZE)
                 # valid_mious.append(miou)
             # The average loss and accuracy for entire validation set is the average of the recorded values.
         valid_preds = np.array(valid_preds)
@@ -149,9 +159,13 @@ def train():
             stop_count += 1
             if stop_count > early_stop:
                 break
-
+    wandb.finish()
     print('End of Training')
 
 if __name__=='__main__':
-    train()
-    wandb.finish()
+    sizes = [128]
+    loss_types = ['CE']
+    for size in sizes:
+        for loss_type in loss_types:
+            train(size, loss_type)
+    

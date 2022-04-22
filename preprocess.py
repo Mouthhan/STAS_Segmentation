@@ -9,8 +9,8 @@ def preprocess():
     name_dir = os.listdir('Train_Annotations')
     name_dir = [name[:-5] for name in name_dir]
 
-    os.mkdir('./Train_Mask',exist_ok = True)
-    os.mkdir('./Train_Masked_Images',exist_ok = True)
+    os.makedirs('./Train_Mask',exist_ok = True)
+    os.makedirs('./Train_Masked_Images',exist_ok = True)
     for name in name_dir[:10]:
         image = cv2.imread(f'Train_Images/{name}.jpg')
 

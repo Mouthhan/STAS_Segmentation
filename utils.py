@@ -1,3 +1,4 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +10,43 @@ import cv2
 import json
 import random
 import wandb
+from PIL import Image
+import os
 
+## Color Map
+
+cls_color = {
+    0:  [0, 0, 0],
+    1:  [255, 255, 255]
+}
+
+
+def label2masks(pred, label, ori, idx, epoch, size):
+    '''
+    Transfer label to mask
+    '''
+    os.makedirs(f'./Template_Valid_Reuslt_{size}', exist_ok= True)
+    ## Original Image
+    ori *= 255
+    ori = ori.astype(np.uint8)
+    ori = np.transpose(ori, (1,2,0))
+
+    ## Pred Mask
+    mask = np.empty((pred.shape[0], pred.shape[1], 3),dtype =np.uint8)
+    mask[pred == 0] = cls_color[0]  # (Black: 000) Background
+    mask[pred == 1] = cls_color[1]  # (White: 111) Foreground
+    ## GroundTruth Mask
+    mask_gt = np.empty((label.shape[0], label.shape[1], 3),dtype =np.uint8)
+    mask_gt[label == 0] = cls_color[0]  # (Black: 000) Background
+    mask_gt[label == 1] = cls_color[1]  # (White: 111) Foreground
+    result = Image.fromarray(mask)
+    result_ori = Image.fromarray(ori)
+    result_gt = Image.fromarray(mask_gt)
+    ## Save
+    result.save(f'./Template_Valid_Reuslt_{size}/{idx}_{epoch}_pred.png')
+    result_ori.save(f'./Template_Valid_Reuslt_{size}/{idx}_{epoch}_ori.png')
+    result_gt.save(f'./Template_Valid_Reuslt_{size}/{idx}_{epoch}_gt.png')
+    return mask
 
 class STASDataset(Dataset):
     def __init__(self, json_root, img_root, names, size):
@@ -121,6 +158,24 @@ class FocalLoss(nn.Module):
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
+## https://blog.csdn.net/CaiDaoqing/article/details/90457197
+class DiceLoss(nn.Module):
+    def __init__(self):
+        super(DiceLoss, self).__init__()
+    
+    def forward(self, input, target):
+        N = target.size(0)
+        smooth = 1
+
+        input_flat = input.view(N, -1)
+        target_flat = target.view(N, -1)
+
+        intersection = input_flat * target_flat
+
+        loss = 2 * (intersection.sum(1) + smooth) / (input_flat.sum(1) + target_flat.sum(1) + smooth)
+        loss = 1 - loss.sum() / N
+
+        return loss
 
 def iou_score(pred, labels):
     '''
@@ -134,8 +189,23 @@ def iou_score(pred, labels):
 
     iou = tp / (tp_fp + tp_fn - tp)
     mean_iou += iou
-    print('\nIOU: %f\n' % mean_iou)
+    print('IOU: %f' % mean_iou)
     return mean_iou
+
+def dice_loss(pred, labels):
+    '''
+    Compute DICE loss on target class
+    '''
+    mean_iou = 0 
+
+    tp_fp = np.sum(pred == 1)
+    tp_fn = np.sum(labels == 1)
+    tp = np.sum((pred == 1) * (labels == 1))
+
+    iou = tp / (tp_fp + tp_fn - tp)
+    mean_iou += iou
+    dice = (mean_iou * 2) / (mean_iou + 1)
+    return 1 - dice
 
 def dice_score(pred, labels):
     '''
@@ -150,7 +220,7 @@ def dice_score(pred, labels):
     iou = tp / (tp_fp + tp_fn - tp)
     mean_iou += iou
     dice = (mean_iou * 2) / (mean_iou + 1)
-    print('\nDICE: %f\n' % dice)
+    print('DICE: %f' % dice)
     return dice
 
 def fix_randomseed(seed):
