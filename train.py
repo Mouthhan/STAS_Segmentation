@@ -16,7 +16,7 @@ def train(size, loss_type):
         # Set the project where this run will be logged
         project="STAS_Segmentation", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"U-Net-{size}-{loss_type}+Dice", 
+        name=f"U-Net-{size}-gamma1-{loss_type}", 
         # Track hyperparameters and run metadata
         config={
         "learning_rate": 3e-4,
@@ -30,7 +30,7 @@ def train(size, loss_type):
     os.makedirs('./models', exist_ok=True)
     img_root = 'Train_Images/'
     json_root = 'Train_Annotations/'
-    model_path = f'models/UNET_crop{SIZE}_{loss_type}+Dice.ckpt'
+    model_path = f'models/UNET_crop{SIZE}_gamma1_{loss_type}.ckpt'
     name_dir = os.listdir('Train_Annotations')
     names = [name[:-5] for name in name_dir]
 
@@ -58,10 +58,10 @@ def train(size, loss_type):
     early_stop = 50
     best_dice = 0.0
 
-    if loss_type == 'CE':
+    if 'CE' in loss_type:
         criterion = nn.CrossEntropyLoss()
-    elif loss_type == 'Focal':
-        criterion = FocalLoss(gamma=2, alpha=0.3)
+    elif 'Focal' in loss_type:
+        criterion = FocalLoss(gamma=1, alpha=0.3)
     creterion_dice = DiceLoss()
     optimizer = torch.optim.AdamW(model.parameters(),lr=lr,weight_decay=decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=300)
@@ -82,9 +82,9 @@ def train(size, loss_type):
                 logits = model(imgs)
                 
                 loss = criterion(logits,labels)
-                loss_dice = creterion_dice(logits.argmax(dim=1), labels)
-
-                loss = loss + loss_dice
+                if 'Mix' in loss_type:
+                    loss_dice = creterion_dice(logits.argmax(dim=1), labels)
+                    loss = loss * (EPOCHS - epoch) * 0.02 + loss_dice * epoch * 0.02
                 train_loss.append(loss.detach().item())
                 loss = loss / accum_iter
                 loss.backward()
@@ -126,15 +126,15 @@ def train(size, loss_type):
                 logits = model(imgs)
 
                 loss = criterion(logits, labels)
-                loss_dice = creterion_dice(logits.argmax(dim=1), labels)
-
-                loss = loss + loss_dice
+                if 'Mix' in loss_type:
+                    loss_dice = creterion_dice(logits.argmax(dim=1), labels)
+                    loss = loss * (EPOCHS - epoch) * 0.02 + loss_dice * epoch * 0.02
                 pred = logits.cpu().argmax(dim=1).numpy()
                 valid_preds += list(pred)
                 valid_masks += list(labels.cpu().numpy())
                 valid_loss.append(loss.item())
-                if idx % 10 == 0 and (epoch) % 5 == 0:
-                    result = label2masks(pred[0], labels.cpu()[0].numpy(), imgs.cpu()[0].numpy(),idx, epoch, SIZE)
+                if idx % 10 == 0 and (epoch+1) % 10 == 0:
+                    result = label2masks(pred[0], labels.cpu()[0].numpy(), imgs.cpu()[0].numpy(),idx, epoch+1, SIZE, loss_type)
                 # valid_mious.append(miou)
             # The average loss and accuracy for entire validation set is the average of the recorded values.
         valid_preds = np.array(valid_preds)
@@ -163,8 +163,8 @@ def train(size, loss_type):
     print('End of Training')
 
 if __name__=='__main__':
-    sizes = [128]
-    loss_types = ['CE']
+    sizes = [128,256]
+    loss_types = ['Focal','Focal-Mix']
     for size in sizes:
         for loss_type in loss_types:
             train(size, loss_type)

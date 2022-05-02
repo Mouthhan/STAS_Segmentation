@@ -21,11 +21,11 @@ cls_color = {
 }
 
 
-def label2masks(pred, label, ori, idx, epoch, size):
+def label2masks(pred, label, ori, idx, epoch, size, loss_type):
     '''
     Transfer label to mask
     '''
-    os.makedirs(f'./Template_Valid_Reuslt_{size}', exist_ok= True)
+    os.makedirs(f'./Template_Valid_Result/{size}_{loss_type}', exist_ok= True)
     ## Original Image
     ori *= 255
     ori = ori.astype(np.uint8)
@@ -43,9 +43,9 @@ def label2masks(pred, label, ori, idx, epoch, size):
     result_ori = Image.fromarray(ori)
     result_gt = Image.fromarray(mask_gt)
     ## Save
-    result.save(f'./Template_Valid_Reuslt_{size}/{idx}_{epoch}_pred.png')
-    result_ori.save(f'./Template_Valid_Reuslt_{size}/{idx}_{epoch}_ori.png')
-    result_gt.save(f'./Template_Valid_Reuslt_{size}/{idx}_{epoch}_gt.png')
+    result.save(f'./Template_Valid_Result/{size}_{loss_type}/{idx}_{epoch}_pred.png')
+    result_ori.save(f'./Template_Valid_Result/{size}_{loss_type}/{idx}_{epoch}_ori.png')
+    result_gt.save(f'./Template_Valid_Result/{size}_{loss_type}/{idx}_{epoch}_gt.png')
     return mask
 
 class STASDataset(Dataset):
@@ -172,7 +172,7 @@ class DiceLoss(nn.Module):
 
         intersection = input_flat * target_flat
 
-        loss = 2 * (intersection.sum(1) + smooth) / (input_flat.sum(1) + target_flat.sum(1) + smooth)
+        loss = (2 * intersection.sum(1) + smooth) / (input_flat.sum(1) + target_flat.sum(1) + smooth)
         loss = 1 - loss.sum() / N
 
         return loss
