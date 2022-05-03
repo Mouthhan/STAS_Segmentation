@@ -13,10 +13,10 @@ https://tbrain.trendmicro.com.tw/Competitions/Details/22
 可執行 preprocess.py 將 mask groundtruth 存出來顯示
 
 ## Change Size
-目前嘗試過 input 為 224x224 or 448x448，可透過 train.py 中的 SIZE 更改
+目前嘗試過 input 為 [128, 224, 256, 448, 512]，可透過 train.py 中的 SIZE 更改
 
 ## Train
-可更動 train.py 中的 model_path 變更儲存的路徑，目前只嘗試 CrossEntropyLoss，預計更改為 FocalLoss
+可更動 train.py 中的 model_path 變更儲存的路徑，目前只嘗試 CrossEntropyLoss，預計更改為 FocalLoss+DICE Loss
 
 ## TODO
 - [x] 更改為 FocalLoss:
