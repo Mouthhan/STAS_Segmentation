@@ -106,13 +106,18 @@ class STASDataset(Dataset):
         x = np.random.randint(high_x) 
         y = np.random.randint(high_y)
 
-
-        img = self.crop(image, choose[0] - x, choose[1] - y, 'img')
-        label_crop = self.crop(label, choose[0] - x, choose[1] - y, 'mask')
-        # cv2.imshow('123',img)
-        # cv2.imshow('mask.jpg',label_crop)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+        ## Random crop or Target crop
+        random_flag = random.randint(0, 9)
+        if random_flag % 3 != 0:
+            img = self.crop(image, choose[0] - x, choose[1] - y, 'img')
+            label_crop = self.crop(label, choose[0] - x, choose[1] - y, 'mask')
+        else:
+            rand_x = random.randint(0,image.shape[1] - self.size -1)
+            rand_y = random.randint(0,image.shape[0] - self.size -1)
+            img = self.crop(image, rand_x, rand_y, 'img')
+            label_crop = self.crop(label, rand_x, rand_y, 'mask')
+        # img = self.crop(image, choose[0] - x, choose[1] - y, 'img')
+        # label_crop = self.crop(label, choose[0] - x, choose[1] - y, 'mask')
 
         tfms = transforms.Compose([
             transforms.ToTensor(),

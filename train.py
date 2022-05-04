@@ -16,7 +16,7 @@ def train(size, loss_type):
         # Set the project where this run will be logged
         project="STAS_Segmentation", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"U-Net-{size}-gamma1-{loss_type}", 
+        name=f"U-Net-{size}-gamma1-{loss_type}-randomcrop03", 
         # Track hyperparameters and run metadata
         config={
         "learning_rate": 3e-4,
@@ -30,7 +30,7 @@ def train(size, loss_type):
     os.makedirs('./models', exist_ok=True)
     img_root = 'Train_Images/'
     json_root = 'Train_Annotations/'
-    model_path = f'models/UNET_crop{SIZE}_gamma1_{loss_type}.ckpt'
+    model_path = f'models/UNET_crop{SIZE}_gamma1_{loss_type}_randomcrop03.ckpt'
     name_dir = os.listdir('Train_Annotations')
     names = [name[:-5] for name in name_dir]
 
