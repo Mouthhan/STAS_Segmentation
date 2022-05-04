@@ -47,6 +47,7 @@ def train(size, loss_type):
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = UNet(3, 2).to(device)
+    # model = U2NETP(3, 2).to(device)
 
 
     # summary(model, (3, 224, 224), device="cuda")
@@ -80,8 +81,8 @@ def train(size, loss_type):
                 imgs = imgs.to(device)
                 labels = labels.to(device)
                 logits = model(imgs)
-                
-                loss = criterion(logits,labels)
+                loss = criterion(logits, labels)
+
                 if 'Mix' in loss_type:
                     loss_dice = creterion_dice(logits.argmax(dim=1), labels)
                     loss = loss * (EPOCHS - epoch) * 0.02 + loss_dice * epoch * 0.02
@@ -164,7 +165,7 @@ def train(size, loss_type):
 
 if __name__=='__main__':
     sizes = [128,256]
-    loss_types = ['Focal','Focal-Mix']
+    loss_types = ['Focal-Mix']
     for size in sizes:
         for loss_type in loss_types:
             train(size, loss_type)

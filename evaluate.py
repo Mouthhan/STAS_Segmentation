@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 from utils import label2masks
 from model import UNet
 
-SIZE = 256
+SIZE = 512
 STEP = SIZE // 2
 
 class STAS_Eval_Dataset(Dataset):
@@ -63,7 +63,7 @@ def evaluate(threshold):
     os.makedirs('./models', exist_ok=True)
     img_root = 'Public_Image/'
     # json_root = 'Train_Annotations/'
-    model_path = f'models/UNET_crop{SIZE}_gamma1_Focal-Mix_randomcrop03.ckpt'
+    model_path = f'models/UNET_crop{SIZE}_gamma1_Focal-Mix.ckpt'
     name_dir = os.listdir('Public_Image')
     names = [name[:-4] for name in name_dir]
 

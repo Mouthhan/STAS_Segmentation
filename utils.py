@@ -251,3 +251,16 @@ def log(train_iou, train_loss, train_dice, valid_iou, valid_loss, valid_dice, ep
                "Valid Loss": valid_loss,
                "Epoch": epoch})
 
+
+## Wandb Log
+def log_u2net(train_iou, train_target_loss, train_ensemble_loss, train_dice, valid_iou, valid_target_loss, valid_ensemble_loss, valid_dice, epoch):
+    wandb.log({"Train IOU": train_iou,
+               "Train DICE": train_dice,
+               "Train Target Loss": train_target_loss,
+               "Train Ensemble Loss": train_ensemble_loss,
+               "Valid IOU": valid_iou,
+               "Valid DICE": valid_dice,
+               "Valid Target Loss": valid_target_loss,
+               "Valid Ensemble Loss": valid_ensemble_loss,
+               "Epoch": epoch})
+
