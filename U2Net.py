@@ -6,7 +6,7 @@ import torch.nn.functional as F
 class REBNCONV(nn.Module):
     def __init__(self,in_ch=3,out_ch=3,dirate=1):
         super(REBNCONV,self).__init__()
-
+ 
         self.conv_s1 = nn.Conv2d(in_ch,out_ch,3,padding=1*dirate,dilation=1*dirate)
         self.bn_s1 = nn.BatchNorm2d(out_ch)
         self.relu_s1 = nn.ReLU(inplace=True)

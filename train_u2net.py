@@ -17,7 +17,7 @@ def train(size, loss_type):
         # Set the project where this run will be logged
         project="STAS_Segmentation", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"U-2-NetP-{size}-gamma1-{loss_type}-randomcrop03", 
+        name=f"U-2-NetP-{size}-{loss_type}-randomcrop03-norm", 
         # Track hyperparameters and run metadata
         config={
         "learning_rate": 3e-4,
@@ -31,7 +31,7 @@ def train(size, loss_type):
     os.makedirs('./models', exist_ok=True)
     img_root = 'Train_Images/'
     json_root = 'Train_Annotations/'
-    model_path = f'models/U2NETP_crop{SIZE}_gamma1_{loss_type}_randomcrop03.ckpt'
+    model_path = f'models/U2NETP_crop{SIZE}_{loss_type}_randomcrop03_norm.ckpt'
     name_dir = os.listdir('Train_Annotations')
     names = [name[:-5] for name in name_dir]
 
@@ -43,7 +43,9 @@ def train(size, loss_type):
     valid_set = Subset(all_dataset, valid_idx)
     if SIZE == 128:
         BATCH_SIZE = 8
-    else:
+    elif SIZE == 256:
+        BATCH_SIZE = 4
+    else:  
         BATCH_SIZE = 2
     train_loader = DataLoader(train_set, batch_size = BATCH_SIZE, shuffle=True)
     valid_loader = DataLoader(valid_set, batch_size = 1)
@@ -58,7 +60,7 @@ def train(size, loss_type):
     EPOCHS = 50
     lr = 3e-4
     decay = 5e-4
-    accum_iter = 16
+    accum_iter = 32 // BATCH_SIZE
     early_stop = 50
     best_dice = 0.0
 
@@ -67,7 +69,9 @@ def train(size, loss_type):
     elif 'Focal' in loss_type:
         criterion = FocalLoss(gamma=1, alpha=0.3)
     creterion_dice = DiceLoss()
-    optimizer = torch.optim.AdamW(model.parameters(),lr=lr,weight_decay=decay)
+    # optimizer = torch.optim.AdamW(model.parameters(),lr=lr,weight_decay=decay)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0)
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=300)
 
     print(f'Start Training with size: {SIZE}, Loss: {loss_type}')
@@ -99,8 +103,8 @@ def train(size, loss_type):
                         total_loss += criterion(logit,labels)
                         if 'Mix' in loss_type:
                             total_loss_dice += creterion_dice(logit.argmax(dim=1), labels)
-                    loss = loss * (EPOCHS - epoch) * 0.02 + loss_dice * epoch * 0.02
-                    total_loss = total_loss * (EPOCHS - epoch) * 0.02 + total_loss_dice * epoch * 0.02
+                    loss = loss * (1 - epoch * 0.01)  + loss_dice * epoch * 0.02
+                    total_loss = total_loss * (1 - epoch * 0.01) + total_loss_dice * epoch * 0.02
                 
                 # if 'Mix' in loss_type:
                 #     loss_dice = creterion_dice(logits.argmax(dim=1), labels)
@@ -118,7 +122,6 @@ def train(size, loss_type):
             ## Update weights
                 if ((batch_idx + 1) % accum_iter == 0) or (batch_idx + 1 == len(train_loader)):
                     optimizer.step()
-                    scheduler.step()
                     optimizer.zero_grad()
         preds = np.array(preds)
         masks = np.array(masks)
@@ -142,7 +145,7 @@ def train(size, loss_type):
         # Iterate the validation set by batches.
         model.eval()
         with torch.no_grad():
-            for idx, batch in enumerate(tqdm(valid_loader)):
+            for batch_idx, batch in enumerate(tqdm(valid_loader)):
                 imgs, labels = batch
                 imgs = imgs.to(device)
                 labels = labels.to(device)
@@ -160,16 +163,16 @@ def train(size, loss_type):
                         total_loss += criterion(logit,labels)
                         if 'Mix' in loss_type:
                             total_loss_dice += creterion_dice(logit.argmax(dim=1), labels)
-                    loss = loss * (EPOCHS - epoch) * 0.02 + loss_dice * epoch * 0.02
-                    total_loss = total_loss * (EPOCHS - epoch) * 0.02 + total_loss_dice * epoch * 0.02
+                    loss = loss * (1 - epoch * 0.01)  + loss_dice * epoch * 0.02
+                    total_loss = total_loss * (1 - epoch * 0.01) + total_loss_dice * epoch * 0.02
                 
                 pred = logits[0].cpu().argmax(dim=1).numpy()
                 valid_preds += list(pred)
                 valid_masks += list(labels.cpu().numpy())
                 valid_target_loss.append(loss.item())
                 valid_ensemble_loss.append(total_loss.item())
-                if idx % 10 == 0 and (epoch+1) % 10 == 0:
-                    result = label2masks(pred[0], labels.cpu()[0].numpy(), imgs.cpu()[0].numpy(),idx, epoch+1, SIZE, loss_type)
+                if batch_idx % 10 == 0 and (epoch+1) % 10 == 0:
+                    result = label2masks(pred[0], labels.cpu()[0].numpy(), imgs.cpu()[0].numpy(),batch_idx, epoch+1, SIZE, loss_type)
                 # valid_mious.append(miou)
             # The average loss and accuracy for entire validation set is the average of the recorded values.
         valid_preds = np.array(valid_preds)
@@ -180,6 +183,7 @@ def train(size, loss_type):
         valid_ensemble_loss = sum(valid_ensemble_loss) / len(valid_ensemble_loss)
         valid_iou = iou_score(valid_preds, valid_masks)
         valid_dice = dice_score(valid_preds, valid_masks)
+        scheduler.step(valid_dice)
 
         # Print the information.
         print(f"[ Valid | {epoch + 1:03d}/{EPOCHS:03d} ] Target Loss = {valid_target_loss:.5f}, Ensemble Loss = {valid_ensemble_loss:.5f}, IOU = {valid_iou:.4f}, DICE = {valid_dice:.4f}")
@@ -199,8 +203,8 @@ def train(size, loss_type):
     print('End of Training')
 
 if __name__=='__main__':
-    sizes = [128,256]
-    loss_types = ['Focal-Mix']
+    sizes = [256]
+    loss_types = ['CE-Mix']
     for size in sizes:
         for loss_type in loss_types:
             train(size, loss_type)

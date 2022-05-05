@@ -9,9 +9,11 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
 from utils import label2masks
 from model import UNet
+from U2Net import U2NETP
 
-SIZE = 128
-STEP = SIZE // 2
+SIZE = 256
+DIVIDE = 4
+STEP = SIZE // DIVIDE
 
 class STAS_Eval_Dataset(Dataset):
     def __init__(self, img_root, names, size):
@@ -27,9 +29,9 @@ class STAS_Eval_Dataset(Dataset):
         pad_down = height * SIZE - 942
         tfms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Pad([0, 0, pad_right, pad_down])
-            # transforms.Normalize(mean=[0.485, 0.456, 0.406],
-            #                      std=[0.229, 0.224, 0.225]),
+            transforms.Pad([0, 0, pad_right, pad_down]),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
         ])
         return tfms(image), self.names[idx]
 
@@ -45,16 +47,16 @@ def label2masks(pred, name, threshold):
     '''
     Transfer label to mask
     '''
-    os.makedirs(f'./Test_Result/CE_th{threshold}_{SIZE}_step{STEP}_random/', exist_ok= True)
+    os.makedirs(f'./Test_Result/U2Net_th{threshold}_{SIZE}_step{STEP}_random/', exist_ok= True)
     ## Pred Mask
     mask = np.empty((pred.shape[0], pred.shape[1], 3),dtype =np.uint8)
     mask[pred == 0] = cls_color[0]  # (Black: 000) Background
     mask[pred == 1] = cls_color[1]  # (White: 111) Foreground
 
     result = Image.fromarray(mask)
-
+  
     ## Save
-    result.save(f'./Test_Result/CE_th{threshold}_{SIZE}_step{STEP}_random/{name}.png')
+    result.save(f'./Test_Result/U2Net_th{threshold}_{SIZE}_step{STEP}_random/{name}.png')
 
     return mask
 
@@ -63,8 +65,9 @@ def evaluate(threshold):
     os.makedirs('./models', exist_ok=True)
     img_root = 'Public_Image/'
     # json_root = 'Train_Annotations/'
-    model_path = f'models/UNET_crop{SIZE}_mix_CE+Dice.ckpt'
-    name_dir = os.listdir('Public_Image')
+    model_path = f'models/U2NETP_crop{SIZE}_CE-Mix_randomcrop03_norm.ckpt'
+    # model_path = f'models/U2NETP_crop{SIZE}_gamma1_Focal-Mix_randomcrop03.ckpt'
+    name_dir = os.listdir('Public_Image')  
     names = [name[:-4] for name in name_dir]
 
 
@@ -74,14 +77,14 @@ def evaluate(threshold):
     test_loader = DataLoader(all_dataset, batch_size = BATCH_SIZE)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = UNet(3, 2)
+    model = U2NETP(3, 2)
     model.load_state_dict(torch.load(model_path))
     model.to(device)
 
 
     # summary(model, (3, 224, 224), device="cuda")
-    height = (942 // STEP)
-    width = (1716 // STEP)
+    height = (942 // STEP) + 1 - DIVIDE
+    width = (1716 // STEP) + 1 - DIVIDE
 
     print('Start Testing')
     # ---------- Validation ----------
@@ -98,9 +101,10 @@ def evaluate(threshold):
                 for w in range(width):
                     temp = imgs[:,:,h * STEP:h * STEP + SIZE, w * STEP: w * STEP + SIZE]
                     temp = temp.to(device)
-                    logits = model(temp)
+                    logits = model(temp)[0]
                     logits = torch.softmax(logits,dim=1, dtype=float)
-                    logits = torch.where(logits > threshold, logits, 0.)
+                    if threshold > 0.0:
+                        logits = torch.where(logits > threshold, logits, 0.)
                     batch_logits[:,h * STEP:h * STEP + SIZE, w * STEP: w * STEP + SIZE] += logits.cpu().numpy()[0]
                     # pred = logits.cpu().argmax(dim=1).numpy()
                     
@@ -115,6 +119,6 @@ def evaluate(threshold):
     print('End of Testing')
 
 if __name__=='__main__':
-    THRESHOLDS = [0.8]
+    THRESHOLDS = [0.9, 0.95]
     for THRESHOLD in THRESHOLDS:
         evaluate(THRESHOLD)

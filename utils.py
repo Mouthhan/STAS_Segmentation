@@ -101,8 +101,8 @@ class STASDataset(Dataset):
 
         choose = centers[np.random.randint(len(centers))]
 
-        high_x = choose[0] if choose[0] - int(self.size*0.8) < 0 else int(self.size*0.8)
-        high_y = choose[1] if choose[1] - int(self.size*0.8) < 0 else int(self.size*0.8)
+        high_x = choose[0] if choose[0] - int(self.size*0.5) < 0 else int(self.size*0.5)
+        high_y = choose[1] if choose[1] - int(self.size*0.5) < 0 else int(self.size*0.5)
         x = np.random.randint(high_x) 
         y = np.random.randint(high_y)
 
@@ -118,11 +118,11 @@ class STASDataset(Dataset):
             label_crop = self.crop(label, rand_x, rand_y, 'mask')
         # img = self.crop(image, choose[0] - x, choose[1] - y, 'img')
         # label_crop = self.crop(label, choose[0] - x, choose[1] - y, 'mask')
-
         tfms = transforms.Compose([
             transforms.ToTensor(),
-            # transforms.Normalize(mean=[0.485, 0.456, 0.406],
-            #                      std=[0.229, 0.224, 0.225]),
+            # transforms.ColorJitter(0.5,0.5,0.5),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
         ])
 
         return tfms(img), label_crop
