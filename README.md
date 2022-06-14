@@ -99,3 +99,13 @@ def get_training_augmentation():
     return albu.Compose(train_transform)
 ```
 
+```python
+random_seed = 8863
+epochs = 50
+lr = 1e-4
+criterion = nn.CrossEntropyLoss(label_smoothing=0.2)
+optimizer = torch.optim.AdamW(model.parameters(),lr=lr)
+gradient_accum_iter = 32
+warmup_step = total_step * 0.12
+scheduler = get_cosine_schedule_with_warmup(optimizer, warmup_step, total_step)
+```
