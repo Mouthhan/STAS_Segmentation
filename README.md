@@ -110,3 +110,17 @@ gradient_accum_iter = 32
 warmup_step = total_step * 0.12
 scheduler = get_cosine_schedule_with_warmup(optimizer, warmup_step, total_step)
 ```
+
+```python
+train_transforms = albu.Compose([
+                albu.Resize(384,384),
+                albu.HorizontalFlip(p=0.5),
+                albu.Rotate(limit=30,p=0.5,border_mode=cv2.BORDER_CONSTANT),
+                albu.ShiftScaleRotate(scale_limit=0.6, rotate_limit=0, shift_limit=0.3, p=0.5, border_mode=0),
+                albu.HueSaturationValue(p=0.3),
+                albu.Sharpen(p=0.5),
+                albu.RandomBrightnessContrast(p=0.5),
+                albu.Normalize(mean=[0.480, 0.423, 0.367],
+                              std=[0.247, 0.241, 0.249])
+])
+```
